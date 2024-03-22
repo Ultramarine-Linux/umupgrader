@@ -1,11 +1,8 @@
 # Copied from https://github.com/can-lehmann/owlkettle/blob/main/examples/dialogs/custom_dialog.nim
 import owlkettle
 import std/envvars
+import defs
 
-
-type User* = object
-  name*: string
-  password*: string
 
 viewable Property:
   name: string
@@ -31,7 +28,7 @@ proc add(property: Property, child: Widget) =
 viewable UserDialog:
   user: User
 
-method view*(dialog: UserDialogState): Widget =
+method view(dialog: UserDialogState): Widget =
   dialog.user.name = getEnv "USER"
   result = gui:
     Dialog:
@@ -66,3 +63,10 @@ method view*(dialog: UserDialogState): Widget =
             visibility = false
             proc changed(password: string) =
               dialog.user.password = password
+
+proc askpass*(app: AppState): User =
+  if app.user.name != "": return app.user
+  let (res, state) = app.open(gui(UserDialog()))
+  if res.kind == DialogAccept:
+    result.name = UserDialogState(state).user.name
+    result.password = UserDialogState(state).user.password

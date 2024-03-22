@@ -1,7 +1,8 @@
-import std/[sequtils, options, os]
+import std/[options, os]
 import strutils, strformat
-import owlkettle, owlkettle/[playground, adw]
-import updateck, download, askpass
+import owlkettle, owlkettle/adw
+import updateck, download, defs
+import askpass # cannot export some views
 
 const
   title: string = "Ultramarine System Upgrader"
@@ -13,24 +14,9 @@ const
     Checking for updates… (Make sure your system is connected to the Internet)
   """
 
-viewable App:
-  counter: int
-  centeringPolicy: CenteringPolicy = CenteringPolicyLoose
-  leftButtons: seq[WindowControlButton] = @[WindowControlIcon, WindowControlMenu]
-  rightButtons: seq[WindowControlButton] = @[WindowControlMinimize,
-      WindowControlMaximize, WindowControlClose]
-  showRightButtons: bool = true
-  showLeftButtons: bool = true
-  showBackButton: bool = true
-  tooltip: string = ""
-  sizeRequest: tuple[x, y: int] = (-1, -1)
-  buffer: TextBuffer
-  firstStart: bool = false
-  newVer: int = 0
-  canApplyUpdate: bool = false
-  user: User
-
-var thread: Thread[AppState]
+var
+  checkTh: Thread[AppState]
+  downloadTh: Thread[(int, AppState)]
 
 proc updateckTh(app: AppState) {.thread.} =
   let upd = determine_update()
@@ -50,11 +36,12 @@ proc updateckTh(app: AppState) {.thread.} =
   app.newVer = ver
   buf.insert(buf.selection.a, fmt"New version available: {ver}")
   buf.insert(buf.selection.a, "\nClick the top right refresh button and the 'Download Update' button to start!\n")
+  redrawFromThread app
 
 method view(app: AppState): Widget =
   if not app.firstStart:
     app.firstStart = true
-    createThread(thread, updateckTh, app)
+    createThread(checkTh, updateckTh, app)
 
   let layout = (app.leftButtons, app.rightButtons)
   result = gui:
@@ -101,13 +88,16 @@ method view(app: AppState): Widget =
             sensitive = app.newVer != 0
 
             proc clicked() =
-              let ver = app.newVer
+              var ver = app.newVer
               app.newVer = 0 # disables the button
-              if app.user == nil || app.user.name == "":
-                let (res, state) = app.open(gui(UserDialog()))
-                if res.kind == DialogAccept:
-                  app.user = UserDialogState(state).user
-              app.canApplyUpdate = dnfDownloadUpdate(ver, app.user, app.buffer)
+              app.user = askpass app
+              if app.user.name == "":
+                app.newVer = ver
+                return
+              sleep 50
+              var args = (ver, app)
+              discard redraw app
+              downloadTh.createThread(dnfDownloadUpdate, args)
 
           Button:
             text = "Apply Update (Reboot)"

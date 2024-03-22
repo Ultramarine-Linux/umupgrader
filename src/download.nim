@@ -1,17 +1,14 @@
 import owlkettle
-import askpass
+import defs
 import std/[os, osproc, streams, strutils, strformat, times]
-
-proc say(buf: TextBuffer, msg: string) =
-  buf.insert(buf.selection.a, msg & "\n")
 
 const supportedDnfs = ["microdnf", "dnf5", "dnf"]
 
-proc runWithLogging(buf: TextBuffer, cmd: string, args: openArray[string] = [], inputs: string = ""): int =
+proc runWithLogging(buf: var TextBuffer, cmd: string, args: openArray[string] = [], inputs: string = ""): int =
   buf.say fmt"┌──── BEGIN: Command Execution `{cmd}` ─────"
   buf.say fmt"├═ Executing `{cmd}` with args `{args}`:"
-  buf.insert(buf.selection.a, "┊")
-  let time = cpuTime()
+  buf.mumble "┊ "
+  let time = now()
 
   let process = startProcess(cmd, args = args, options = {poStdErrToStdOut})
   if inputs != "":
@@ -23,15 +20,16 @@ proc runWithLogging(buf: TextBuffer, cmd: string, args: openArray[string] = [], 
   while process.running:
     if outs.at_end:
       sleep(20)
-    buf.insert(buf.selection.a, outs.read_all.replace("\n", "\n┊"))
+    while not outs.at_end:
+      buf.mumble ($outs.read_char).replace("\n", "\n┊ ")
 
-  buf.insert(buf.selection.a, "\n│\n")
+  buf.say "\n│"
   buf.say fmt"├═ Return code: {process.peekExitCode}"
-  buf.say fmt"├═ Time taken: {cpuTime() - time}"
+  buf.say fmt"├═ Time taken: {now() - time}"
   buf.say fmt"└──── END OF Command Execution `{cmd}` ─────"
   return process.peekExitCode
 
-proc findDnf(buf: TextBuffer): string =
+proc findDnf(buf: var TextBuffer): string =
   buf.say "Finding dnf…"
 
   for trydnf in supportedDnfs:
@@ -45,13 +43,26 @@ proc findDnf(buf: TextBuffer): string =
   buf.say "Detected dnf: " & result
 
 
-proc dnfDownloadUpdate*(ver: int, user: User, buf: TextBuffer): bool =
+proc dnfDownloadUpdateInner(ver: int, app: var AppState): bool =
+  var (user, buf) = (app.user, app.buffer)
   let dnf = findDnf buf
   if dnf == "": return
 
   buf.say "Running normal system upgrade…"
-  let rc = runWithLogging(buf, "sudo", ["-u", user.name, dnf, "upgrade", "--refresh", "-y"], user.password)
+  let sudo = findExe "sudo"
+  if sudo == "":
+    buf.say "`sudo` is not found. Exiting"
+    return
+  buf.say ""
+  
+  let rc = runWithLogging(buf, sudo, ["-u", user.name, dnf, "upgrade", "--refresh", "-y"], user.password & "\n")
   if rc != 0:
     buf.say "An error occurred. The update cannot continue."
     return
   # TODO: …
+
+proc dnfDownloadUpdate*(verapp: (int, AppState)) {.thread.} =
+  var (ver, app) = verapp
+  redrawFromThread app
+  redrawFromThread app
+  app.canApplyUpdate = dnfDownloadUpdateInner(ver, app)
