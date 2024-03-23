@@ -1,11 +1,17 @@
 ## Module with things that other modules need
 ## Putting stuff here such that no cyclic imports are caused
+## 
+## Threading ref: https://forum.nim-lang.org/t/10719
 import owlkettle, owlkettle/adw
 
 
 type User* = object
   name*: string
   password*: string
+
+type Hub* = object
+  toMain*: Channel[string]
+  toThrd*: Channel[string]
 
 
 viewable App:
@@ -24,14 +30,27 @@ viewable App:
   newVer: int = 0
   canApplyUpdate: bool = false
   user: User
+  hub: ref Hub
 
-proc say*(buf: var TextBuffer, msg: string) =
+  hooks:
+    afterBuild:
+      proc redrawer(): bool =
+        if state.hub[].toMain.peek > 0:
+          discard redraw state
+        
+        const KEEP_LISTENER_ACTIVE = true
+        return KEEP_LISTENER_ACTIVE
+      discard addGlobalTimeout(200, redrawer)
+
+
+proc say*(hub: ref Hub, msg: string) =
   echo msg
-  buf.insert(buf.selection.a, msg & "\n")
+  hub[].toMain.send "\n" & msg & "\n"
 
-proc mumble*(buf: var TextBuffer, msg: string) =
+
+proc mumble*(hub: ref Hub, msg: string) =
   stdout.write msg
-  buf.insert(buf.selection.a, msg)
+  hub[].toMain.send "\n" & msg
 
 
 export App, AppState, User

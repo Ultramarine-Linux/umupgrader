@@ -53,8 +53,9 @@ method view(dialog: UserDialogState): Widget =
           name = "Username"
           Entry:
             text = dialog.user.name
-            proc changed(name: string) =
-              dialog.user.name = name
+            sensitive = false
+            # proc changed(name: string) =
+            #   dialog.user.name = name
         
         Property:
           name = "Password"
