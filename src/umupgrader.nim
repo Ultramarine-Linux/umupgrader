@@ -1,7 +1,7 @@
-import std/[options, os]
+import std/options
 import strutils, strformat
 import owlkettle, owlkettle/adw
-import updateck, download, defs, askpass
+import defs, askpass, server
 
 const
   title: string = "Ultramarine System Upgrader"
@@ -12,24 +12,19 @@ const
 
     Checking for updates… (Make sure your system is connected to the Internet)
   """
+  downloadFailMsg: string = dedent """
+    Failed to download system upgrade. This is usually caused by missing packages.
 
-proc updateck(hub: ref Hub) =
-  let upd = determine_update()
-  if upd.is_none():
-    hub.say "Cannot determine update status. Make sure you have an Internet connection."
-    return
-  let ver = upd.get
-  if ver < 0:
-    hub.say fmt"Hooray! Your system is up to date. (Version: {-ver})"
-    return
-  if ver == 0:
-    hub.say "This operating system is not supported."
-    return
-  hub[].toMain.send "newver\n" & $ver
-  hub.say fmt"New version available: {ver}"
-  hub.say "\nClick the top right refresh button and the 'Download Update' button to start!\n"
+    You should check in the logs if vital/system/co0re packages would be removed. You may seek help via:
+    - Fediverse: @ultramarine@fedi.fyralabs.com
+    - Ultramarine Discord: https://discord.gg/bUuQasHdrF
+    - Reddit: r/ultramarine
+    - Twitter/X: @UltramarineProj
 
-method view(app: AppState): Widget =
+    If you are certain the system upgrade would not break your computer, you may continue by clicking the download button again. This will force the package manager to remove packages that could not be upgraded.
+  """
+
+proc handle_main_recv(app: AppState) =
   while app.hub[].toMain.peek > 0:
     let msg = app.hub[].toMain.recv
     if msg.starts_with "\n":
@@ -37,14 +32,29 @@ method view(app: AppState): Widget =
     elif msg.starts_with "newver\n":
       app.newVer = parseInt msg["newver\n".len..^1]
     elif msg.starts_with "dlstat\n":
-      app.newVer = parseInt msg["dlstat\n".len..^1]
-    else:
-      echo "W: received unknown message:"
-      echo "┌──── BEGIN: unknown message from child thread ─────"
-      for line in msg.split_lines:
-        echo fmt"┊ {line}"
-      echo "└──── END OF unknown message from child thread ─────"
+      if app.newVer > 0 and app.dlfailed: return  # handled by dlerr
+      case msg["dlstat\n".len..^1]
+      of "0": app.newVer *= -1
+      of "1": app.canApplyUpdate = true
+      else: msg.recv_unknown_msg "main"
+    elif msg == "dlerr":
+      app.dlfailed = true
+      discard app.open: gui:
+        MessageDialog:
+          message = downloadFailMsg
+          DialogButton {.addButton.}:
+            text = "Ok"
+            res = DialogAccept
+      app.newVer *= -1
+    elif msg.starts_with "rebootstat\n":
+      case msg["rebootstat\n".len..^1]
+      of "0": discard # WTF.
+      of "1": quit(0)
+      else: msg.recv_unknown_msg "main"
+    else: msg.recv_unknown_msg "main"
 
+method view(app: AppState): Widget =
+  handle_main_recv app
 
   let layout = (app.leftButtons, app.rightButtons)
   result = gui:
@@ -55,11 +65,11 @@ method view(app: AppState): Widget =
 
       AdwHeaderBar {.addTitlebar.}:
         windowControls = layout
-        centeringPolicy = app.centeringPolicy
-        showLeftButtons = app.showLeftButtons
-        showRightButtons = app.showRightButtons
-        showBackButton = app.showBackButton
-        tooltip = app.tooltip
+        centeringPolicy = CenteringPolicyLoose
+        showLeftButtons = true
+        showRightButtons = true
+        showBackButton = true
+        tooltip = ""
         sizeRequest = app.sizeRequest
 
         # insert(app.toAutoFormMenu(sizeRequest = (400, 400))) {.addRight.}
@@ -87,12 +97,20 @@ method view(app: AppState): Widget =
         Box(orient = OrientX, margin = 12, spacing = 6) {.expand: false.}:
 
           Button:
-            text = "Download Update"
-            sensitive = app.newVer != 0
+            text = if app.dlfailed: "Force Download Update" else: "Download Update"
+            sensitive = app.newVer > 0
+            if app.dlfailed:
+              style = [ButtonDestructive]
+            elif app.newVer > 0 and not app.canApplyUpdate:
+              style = [ButtonSuggested]
 
             proc clicked() =
+              if app.dlfailed:
+                let ver = app.newVer
+                app.newVer *= -1
+                app.hub[].toThrd.send fmt "forcedl\n{app.user.name}\n{app.user.password}\n{ver}"
               var ver = app.newVer
-              app.newVer = 0 # disables the button
+              app.newVer *= -1 # disables the button
               app.user = askpass app
               if app.user.name == "":
                 app.newVer = ver
@@ -100,27 +118,14 @@ method view(app: AppState): Widget =
               app.hub[].toThrd.send fmt "download\n{app.user.name}\n{app.user.password}\n{ver}"
 
           Button:
-            text = "Apply Update (Reboot)"
+            text = "Apply Update (Reboot RIGHT NOW)"
             sensitive = app.canApplyUpdate
+            if app.canApplyUpdate:
+              style = [ButtonSuggested]
 
             proc clicked() =
-              # TODO: reboot?
-              discard
+              app.hub[].toThrd.send fmt "reboot\n{app.user.name}\n{app.user.password}"
 
-          Button {.expand: false.}:
-            icon = "reload"
-            style = [ButtonSuggested]
-
-            proc clicked() =
-              discard redraw app
-
-        # Box(orient = OrientX, margin = 12, spacing = 6):
-        #   Label(text = $app.counter)
-        #   Button {.expand: false.}:
-        #     text = "+"
-        #     style = [ButtonSuggested]
-        #     proc clicked() =
-        #       app.counter += 1
         ScrolledWindow:
           TextView:
             margin = 12
@@ -143,35 +148,6 @@ proc setupClient(hub: ref Hub) =
   ))
   buf.insert(buf.selection.a, startmsg)
   adw.brew(gui(App(buffer = buf, hub = hub)))
-
-proc setupServer(hub: ref Hub): Thread[ref Hub] =
-  proc serverLoop(hub: ref Hub) =
-    while true:
-      let tried = hub.toThrd.try_recv
-      if tried.dataAvailable:
-        let msg = tried.msg
-        if msg == "bai":
-          return
-        if msg == "updck":
-          updateck(hub)
-          continue
-        if msg.starts_with "download\n":
-          echo "thrd: received download event"
-          let lines = msg.split_lines
-          let ver = lines[3].parseInt
-          let user = User(name: lines[1], password: lines[2])
-          let ret = if dnfDownloadUpdate(hub, ver, user): 0 else: ver
-          hub[].toMain.send "dlstat\n" & $ret
-          continue
-
-        echo "W: received unknown message:"
-        echo "┌──── BEGIN: unknown message from main thread ─────"
-        for line in msg.split_lines:
-          echo fmt"┊ {line}"
-        echo "└──── END OF unknown message from main thread ─────"
-      sleep(200) # Reduces stress on CPU when idle, increase when higher latency is acceptable for even better idle efficiency
-  
-  createThread(result, serverLoop, hub)
 
 proc main() =
   var hub = new Hub

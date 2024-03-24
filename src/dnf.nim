@@ -11,7 +11,8 @@ proc runWithLogging(hub: ref Hub, cmd: string, args: openArray[string] = [], inp
 
   let process = startProcess(cmd, args = args, options = {poStdErrToStdOut})
   if inputs != "":
-    process.inputStream().write inputs
+    process.inputStream.write inputs
+    process.inputStream.flush
   defer: process.close()
   let outs = process.outputStream
   # NOTE: outs also contains stderr
@@ -53,8 +54,37 @@ proc dnfDownloadUpdate*(hub: ref Hub, ver: int, user: User): bool =
     return
   hub.say ""
   
-  let rc = runWithLogging(hub, sudo, ["-S", dnf, "upgrade", "--refresh", "-y"], user.password & "\n")
-  if rc != 0:
+  if runWithLogging(hub, sudo, ["-S", dnf, "upgrade", "--refresh", "-y"], user.password & "\n") != 0:
     hub.say "An error occurred. The update cannot continue."
     return
-  # TODO: …
+
+  if runWithLogging(hub, sudo, ["-S", dnf, "install", "dnf-plugin-system-upgrade"], user.password & "\n") != 0:
+    hub.say "An error occurred. The update cannot continue."
+    return
+
+  if runWithLogging(hub, sudo, ["-S", "dnf", "system-upgrade", "download", fmt"--releasever={ver}", "--best"], user.password & "\n") != 0:
+    hub[].toMain.send "dlerr"
+    return
+  
+  return true
+
+proc dnfForceDownloadUpdate*(hub: ref Hub, ver: int, user: User): bool =
+  let dnf = findDnf hub
+  assert dnf != ""
+  let sudo = findExe "sudo"
+  assert sudo != ""
+  if runWithLogging(hub, sudo, ["-S", "dnf", "system-upgrade", "download", fmt"--releasever={ver}", "--best", "--allowerasing"], user.password & "\n") != 0:
+    hub.say "An error occurred. The update cannot continue."
+    return
+  return true
+
+proc reboot*(hub: ref Hub, user: User): bool =
+  let dnf = findDnf hub
+  assert dnf != ""
+  let sudo = findExe "sudo"
+  assert sudo != ""
+  if runWithLogging(hub, sudo, ["-S", "dnf", "system-upgrade", "reboot"], user.password & "\n") != 0:
+    hub.say "An error occurred. Cannot reboot."
+    return
+  return true
+

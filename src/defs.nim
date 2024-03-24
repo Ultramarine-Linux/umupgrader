@@ -2,7 +2,8 @@
 ## Putting stuff here such that no cyclic imports are caused
 ## 
 ## Threading ref: https://forum.nim-lang.org/t/10719
-import owlkettle, owlkettle/adw
+import owlkettle
+import std/[strutils, strformat]
 
 
 type User* = object
@@ -15,15 +16,9 @@ type Hub* = object
 
 
 viewable App:
-  counter: int
-  centeringPolicy: CenteringPolicy = CenteringPolicyLoose
   leftButtons: seq[WindowControlButton] = @[WindowControlIcon, WindowControlMenu]
   rightButtons: seq[WindowControlButton] = @[WindowControlMinimize,
       WindowControlMaximize, WindowControlClose]
-  showRightButtons: bool = true
-  showLeftButtons: bool = true
-  showBackButton: bool = true
-  tooltip: string = ""
   sizeRequest: tuple[x, y: int] = (-1, -1)
   buffer: TextBuffer
   firstStart: bool = false
@@ -31,6 +26,7 @@ viewable App:
   canApplyUpdate: bool = false
   user: User
   hub: ref Hub
+  dlfailed: bool = false
 
   hooks:
     afterBuild:
@@ -52,5 +48,12 @@ proc mumble*(hub: ref Hub, msg: string) =
   stdout.write msg
   hub[].toMain.send "\n" & msg
 
+
+proc recv_unknown_msg*(msg: string, isFrom: string) =
+  echo "W: received unknown message:"
+  echo fmt"┌──── BEGIN: unknown message from {isFrom} thread ─────"
+  for line in msg.split_lines:
+    echo "┊ "&line
+  echo fmt"└──── END OF unknown message from {isFrom} thread ─────"
 
 export App, AppState, User
