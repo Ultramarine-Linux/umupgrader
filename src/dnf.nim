@@ -62,7 +62,7 @@ proc dnfDownloadUpdate*(hub: ref Hub, ver: int, user: User): bool =
     hub.say "An error occurred. The update cannot continue."
     return
 
-  if runWithLogging(hub, sudo, ["-S", "dnf", "system-upgrade", "download", fmt"--releasever={ver}", "--best"], user.password & "\n") != 0:
+  if runWithLogging(hub, sudo, ["-S", "dnf", "system-upgrade", "download", fmt"--releasever={ver}", "--best", "-y"], user.password & "\n") != 0:
     hub[].toMain.send "dlerr"
     return
   
@@ -73,7 +73,7 @@ proc dnfForceDownloadUpdate*(hub: ref Hub, ver: int, user: User): bool =
   assert dnf != ""
   let sudo = findExe "sudo"
   assert sudo != ""
-  if runWithLogging(hub, sudo, ["-S", "dnf", "system-upgrade", "download", fmt"--releasever={ver}", "--best", "--allowerasing"], user.password & "\n") != 0:
+    if runWithLogging(hub, sudo, ["-S", "dnf", "system-upgrade", "download", fmt"--releasever={ver}", "--best", "-y", "--allowerasing"], user.password & "\n") != 0:
     hub.say "An error occurred. The update cannot continue."
     return
   return true

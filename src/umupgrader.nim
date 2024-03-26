@@ -23,6 +23,14 @@ const
 
     If you are certain the system upgrade would not break your computer, you may continue by clicking the download button again. This will force the package manager to remove packages that could not be upgraded.
   """
+  css: string = dedent """
+    textview:disabled text {
+      color: @theme_fg_color;
+    }
+    .bright-fg {
+      color: @theme_fg_color;
+    }
+  """
 
 proc handle_main_recv(app: AppState) =
   while app.hub[].toMain.peek > 0:
@@ -71,22 +79,6 @@ method view(app: AppState): Widget =
         showBackButton = true
         tooltip = ""
         sizeRequest = app.sizeRequest
-
-        # insert(app.toAutoFormMenu(sizeRequest = (400, 400))) {.addRight.}
-
-        Button {.addLeft.}:
-          text = "1"
-          style = [ButtonFlat]
-
-          proc clicked() =
-            echo "Clicked 1"
-
-        Button {.addRight.}:
-          text = "2"
-          style = [ButtonFlat]
-
-          proc clicked() =
-            echo "Clicked 2"
 
         if AdwVersion >= (1, 4):
           Box {.addTitle.}:
@@ -138,6 +130,7 @@ method view(app: AppState): Widget =
             sensitive = false
             tooltip = ""
             sizeRequest = app.sizeRequest
+            style = [StyleClass("bright-fg")]
 
 proc setupClient(hub: ref Hub) =
   hub[].toThrd.send "updck"
@@ -147,7 +140,7 @@ proc setupClient(hub: ref Hub) =
     weight: some(700)
   ))
   buf.insert(buf.selection.a, startmsg)
-  adw.brew(gui(App(buffer = buf, hub = hub)))
+  adw.brew(gui(App(buffer = buf, hub = hub)), stylesheets=[newStyleSheet(css)])
 
 proc main() =
   var hub = new Hub
