@@ -12,16 +12,17 @@ const
 
     Checking for updates… (Make sure your system is connected to the Internet)
   """
-  downloadFailMsg: string = dedent """
+  downloadFailMsg1: string = dedent """
     Failed to download system upgrade. This is usually caused by missing packages.
 
-    You should check in the logs if vital/system/co0re packages would be removed. You may seek help via:
-    - Fediverse: @ultramarine@fedi.fyralabs.com
-    - Ultramarine Discord: https://discord.gg/bUuQasHdrF
-    - Reddit: r/ultramarine
-    - Twitter/X: @UltramarineProj
-
-    If you are certain the system upgrade would not break your computer, you may continue by clicking the download button again. This will force the package manager to remove packages that could not be upgraded.
+    You should check in the logs if vital/system/core packages would be removed.
+    You may seek help via our socials, which are listed on the link below:
+  """
+  supportLink: string = "https://wiki.ultramarine-linux.org/en/community/community/"
+  downloadFailMsg2: string = dedent """
+    If you are certain the system upgrade would not break your computer,
+    you may continue by clicking the download button again.
+    This will force the package manager to remove packages that could not be upgraded.
   """
   css: string = dedent """
     textview:disabled text {
@@ -30,7 +31,43 @@ const
     .bright-fg {
       color: @theme_fg_color;
     }
+    .normal-text {
+      font-size: medium;
+    }
   """
+viewable MyDialog:
+  discard
+
+method view(dialog: MyDialogState): Widget =
+  let buf1 = newTextBuffer()
+  buf1.insert(buf1.selection.a, downloadFailMsg1)
+  let buf2 = newTextBuffer()
+  buf2.insert(buf2.selection.a, downloadFailMsg2)
+  result = gui:
+    Dialog:
+      title = "Download Failed"
+      defaultSize = (700, 350)
+      Box(orient = OrientY):
+        TextView:
+          buffer = buf1
+          margin = 12
+          editable = false
+          sensitive = false
+          style = [StyleClass("bright-fg"), StyleClass("normal-text")]
+        LinkButton:
+          uri = supportLink
+          text = "Seek support"
+          style = [StyleClass("normal-text")]
+        TextView:
+          buffer = buf2
+          margin = 12
+          editable = false
+          sensitive = false
+          style = [StyleClass("bright-fg"), StyleClass("normal-text")]
+        Button {.vAlign: AlignEnd.}:
+          text = "Close"
+          proc clicked() =
+            dialog.scheduleCloseWindow()
 
 proc handle_main_recv(app: AppState) =
   while app.hub[].toMain.peek > 0:
@@ -47,13 +84,8 @@ proc handle_main_recv(app: AppState) =
       else: msg.recv_unknown_msg "main"
     elif msg == "dlerr":
       app.dlfailed = true
-      discard app.open: gui:
-        MessageDialog:
-          message = downloadFailMsg
-          DialogButton {.addButton.}:
-            text = "Ok"
-            res = DialogAccept
-      app.newVer *= -1
+      discard app.open(gui(MyDialog()))
+      if app.newVer > 0: app.newVer *= -1
     elif msg.starts_with "rebootstat\n":
       case msg["rebootstat\n".len..^1]
       of "0": discard # WTF.
@@ -98,11 +130,13 @@ method view(app: AppState): Widget =
 
             proc clicked() =
               if app.dlfailed:
-                let ver = app.newVer
-                app.newVer *= -1
+                var ver = app.newVer
+                if app.newVer > 0: app.newVer *= -1
+                if ver < 0: ver *= -1
                 app.hub[].toThrd.send fmt "forcedl\n{app.user.name}\n{app.user.password}\n{ver}"
               var ver = app.newVer
-              app.newVer *= -1 # disables the button
+              if app.newVer > 0: app.newVer *= -1 # disables the button
+              if ver < 0: ver *= -1
               app.user = askpass app
               if app.user.name == "":
                 app.newVer = ver
