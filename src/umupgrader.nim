@@ -85,7 +85,7 @@ proc handle_main_recv(app: AppState) =
     elif msg == "dlerr":
       app.dlfailed = true
       discard app.open(gui(MyDialog()))
-      if app.newVer > 0: app.newVer *= -1
+      if app.newVer < 0: app.newVer *= -1
     elif msg.starts_with "rebootstat\n":
       case msg["rebootstat\n".len..^1]
       of "0": discard # WTF.

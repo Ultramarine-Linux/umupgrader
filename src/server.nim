@@ -31,7 +31,7 @@ proc handle_thrd_recv(hub: ref Hub, msg: string): bool =
     let lines = msg.split_lines
     let ver = lines[3].parseInt
     let user = User(name: lines[1], password: lines[2])
-    let ret = if dnfDownloadUpdate(hub, ver, user): 0 else: 1
+    let ret = if dnfDownloadUpdate(hub, ver, user): 1 else: 0
     hub[].toMain.send "dlstat\n" & $ret
     return
 
@@ -40,7 +40,7 @@ proc handle_thrd_recv(hub: ref Hub, msg: string): bool =
     let lines = msg.split_lines
     let ver = lines[3].parseInt
     let user = User(name: lines[1], password: lines[2])
-    let ret = if dnfDownloadUpdate(hub, ver, user): 0 else: 1
+    let ret = if dnfDownloadUpdate(hub, ver, user): 1 else: 0
     hub[].toMain.send "dlstat\n" & $ret
     return
 
