@@ -134,6 +134,7 @@ method view(app: AppState): Widget =
                 if app.newVer > 0: app.newVer *= -1
                 if ver < 0: ver *= -1
                 app.hub[].toThrd.send fmt "forcedl\n{app.user.name}\n{app.user.password}\n{ver}"
+                return
               var ver = app.newVer
               if app.newVer > 0: app.newVer *= -1 # disables the button
               if ver < 0: ver *= -1
