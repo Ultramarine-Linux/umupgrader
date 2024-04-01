@@ -145,7 +145,7 @@ method view(app: AppState): Widget =
               app.hub[].toThrd.send fmt "download\n{app.user.name}\n{app.user.password}\n{ver}"
 
           Button:
-            text = "Apply Update (Reboot RIGHT NOW)"
+            text = "Apply Update (Requires Reboot)"
             sensitive = app.canApplyUpdate
             if app.canApplyUpdate:
               style = [ButtonSuggested]
