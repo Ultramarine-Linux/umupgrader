@@ -72,12 +72,12 @@ proc dnfDownloadUpdate*(hub: ref Hub, ver: int): bool =
     hub.say "An error occurred. The update cannot continue."
     return
 
-  hub[].toMain.send "dlprogress\n"$(1/3)
+  hub[].toMain.send "dlprogress\n" & $(1/3)
   if runWithLogging(hub, 1, dnf, ["install", "dnf-plugin-system-upgrade"]) != 0:
     hub.say "An error occurred. The update cannot continue."
     return
 
-  hub[].toMain.send "dlprogress\n"$(2/3)
+  hub[].toMain.send "dlprogress\n" & $(2/3)
   if runWithLogging(hub, 2, dnf, ["system-upgrade", "download", fmt"--releasever={ver}", "--best", "-y"]) != 0:
     hub[].toMain.send "dlerr"
     return
