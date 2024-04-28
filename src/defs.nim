@@ -6,10 +6,6 @@ import owlkettle
 import std/[strutils, strformat, options]
 
 
-type User* = object
-  name*: string
-  password*: string
-
 type Hub* = object
   toMain*: Channel[string]
   toThrd*: Channel[string]
@@ -24,10 +20,10 @@ viewable App:
   firstStart: bool = false
   newVer: int = 0
   canApplyUpdate: bool = false
-  user: User
   hub: ref Hub
   dlfailed: bool = false
   dlprogress: Option[float] = none(float)
+  logfile: File
 
   hooks:
     afterBuild:
@@ -57,4 +53,4 @@ proc recv_unknown_msg*(msg: string, isFrom: string) =
     echo "┊ "&line
   echo fmt"└──── END OF unknown message from {isFrom} thread ─────"
 
-export App, AppState, User
+export App, AppState

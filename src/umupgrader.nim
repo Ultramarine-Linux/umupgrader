@@ -1,7 +1,8 @@
 import std/options
+import std/[os, osproc]
 import strutils, strformat
 import owlkettle, owlkettle/adw
-import defs, askpass, server
+import defs, server
 
 const
   title: string = "Ultramarine System Upgrader"
@@ -34,9 +35,7 @@ const
       font-size: medium;
     }
   """
-
-let logfile = open("/tmp/umupgrader.log", fmWrite)
-let iconpixbuf = loadPixbuf("/usr/share/pixmaps/fedora-logo-sprite.svg")
+  logfilepath: string = "/tmp/umupgrader.log"
 
 viewable MyDialog:
   discard
@@ -49,7 +48,7 @@ method view(dialog: MyDialogState): Widget =
   result = gui:
     Dialog:
       title = "Download Failed"
-      defaultSize = (700, 350)
+      defaultSize = (500, 400)
       Box(orient = OrientY):
         TextView:
           buffer = buf1
@@ -77,13 +76,20 @@ proc handle_main_recv(app: AppState) =
     let msg = app.hub[].toMain.recv
     if msg.starts_with "\n":
       # handle the funny logs
-      logfile.writeLine(msg[1..^1])
+      app.logfile.write(msg[1..^1])
     elif msg.starts_with "newver\n":
       app.newVer = parseInt msg["newver\n".len..^1]
     elif msg.starts_with "dlstat\n":
       if app.newVer > 0 and app.dlfailed: return  # handled by dlerr
       case msg["dlstat\n".len..^1]
-      of "0": app.newVer *= -1
+      of "0":
+        discard app.open: gui:
+          MessageDialog:
+            message = "An error occurred. The update cannot continue."
+            DialogButton {.addButton.}:
+              text = "Ok"
+              res = DialogAccept
+        app.newVer *= -1
       of "1": app.canApplyUpdate = true
       else: msg.recv_unknown_msg "main"
     elif msg == "dlerr":
@@ -116,7 +122,7 @@ method view(app: AppState): Widget =
           title = "Ultramarine System Upgrade"
           description = "You may use this app to upgrade Ultramarine Linux\nto the latest version: [Ultramarine 40]"
 
-          Box(orient = OrientY):
+          Box(orient = OrientY, spacing = 25):
             if app.dlprogress.is_some:
               ProgressBar {.vAlign: AlignCenter.}:
                 ellipsize = EllipsizeEnd
@@ -143,31 +149,27 @@ method view(app: AppState): Widget =
                         DialogButton {.addButton.}:
                           text = "Cancel"
                           res = DialogCancel
-                          DialogButton {.addButton.}:
-                            text = "Restart"
-                            res = DialogAccept
-                            style = [ButtonDestructive]
+                        DialogButton {.addButton.}:
+                          text = "Restart"
+                          res = DialogAccept
+                          style = [ButtonDestructive]
 
                     if res.kind == DialogAccept:
-                      app.hub[].toThrd.send fmt "reboot\n{app.user.name}\n{app.user.password}"
+                      app.hub[].toThrd.send fmt "reboot"
                       return
                   if app.dlfailed:
                     var ver = app.newVer
                     if app.newVer > 0: app.newVer *= -1
                     if ver < 0: ver *= -1
-                    app.hub[].toThrd.send fmt "forcedl\n{app.user.name}\n{app.user.password}\n{ver}"
+                    app.hub[].toThrd.send fmt "forcedl\n{ver}"
                     return
                   var ver = app.newVer
                   if app.newVer > 0: app.newVer *= -1 # disables the button
                   if ver < 0: ver *= -1
-                  app.user = askpass app
-                  if app.user.name == "":
-                    app.newVer = ver
-                    return
-                  app.hub[].toThrd.send fmt "download\n{app.user.name}\n{app.user.password}\n{ver}"
+                  app.hub[].toThrd.send fmt "download\n{ver}"
 
 
-proc setupClient(hub: ref Hub) =
+proc setupClient(hub: ref Hub, logfile: File) =
   hub[].toThrd.send "updck"
   let buf = newTextBuffer()
   discard buf.registerTag("marker", TagStyle(
@@ -175,15 +177,23 @@ proc setupClient(hub: ref Hub) =
     weight: some(700)
   ))
   buf.insert(buf.selection.a, startmsg)
-  adw.brew(gui(App(buffer = buf, hub = hub)), stylesheets=[newStyleSheet(css)])
+  adw.brew(gui(App(buffer = buf, hub = hub, logfile = logfile)), stylesheets=[newStyleSheet(css)])
 
 proc main() =
+  if not os.isAdmin():
+    discard findExe("xhost").startProcess(args=["si:localuser:root"], options={poParentStreams}).waitForExit
+    let x = findExe("pkexec").startProcess(args="umupgrader"&commandLineParams(), options={poParentStreams}).waitForExit
+    discard findExe("xhost").startProcess(args=["-si:localuser:root"], options={poParentStreams}).waitForExit
+    quit x
+  logfilepath.writeFile "" # creates the logfile
+  let logfile = open(logfilepath, fmWrite)
+  # let iconpixbuf = loadPixbuf("/usr/share/pixmaps/fedora-logo-sprite.svg")
   defer: logfile.close()
   var hub = new Hub
   open hub[].toMain
   open hub[].toThrd
   let server = setupServer hub
-  setupClient hub
+  setupClient(hub, logfile)
   hub[].toThrd.send "bai"
   echo "Joining thread…"
   joinThread server

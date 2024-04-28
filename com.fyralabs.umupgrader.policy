@@ -8,14 +8,17 @@
   <vendor>umupgrader</vendor>
   <vendor_url>https://github.com/Ultramarine-Linux/umupgrader</vendor_url>
 
-  <action id="net.hadess.SensorProxy.claim-sensor">
-    <description>System Upgrader</description>
+  <action id="org.freedesktop.policykit.pkexec.umupgrader">
+    <description>Run System Upgrader</description>
     <message>Privileges are required to perform a system upgrade.</message>
+    <icon_name>system-upgrade</icon_name>
     <defaults>
-      <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
-      <allow_active>yes</allow_active>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
     </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/umupgrader</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
   </action>
 
 </policyconfig>
