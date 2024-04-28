@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+
+<policyconfig>
+
+  <vendor>umupgrader</vendor>
+  <vendor_url>https://github.com/Ultramarine-Linux/umupgrader</vendor_url>
+
+  <action id="net.hadess.SensorProxy.claim-sensor">
+    <description>System Upgrader</description>
+    <message>Privileges are required to perform a system upgrade.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+</policyconfig>

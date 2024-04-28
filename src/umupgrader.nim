@@ -14,7 +14,6 @@ const
   """
   downloadFailMsg1: string = dedent """
     Failed to download system upgrade. This is usually caused by missing packages.
-
     You should check in the logs if vital/system/core packages would be removed.
     You may seek help via our socials, which are listed on the link below:
   """
@@ -35,6 +34,10 @@ const
       font-size: medium;
     }
   """
+
+let logfile = open("/tmp/umupgrader.log", fmWrite)
+let iconpixbuf = loadPixbuf("/usr/share/pixmaps/fedora-logo-sprite.svg")
+
 viewable MyDialog:
   discard
 
@@ -73,7 +76,8 @@ proc handle_main_recv(app: AppState) =
   while app.hub[].toMain.peek > 0:
     let msg = app.hub[].toMain.recv
     if msg.starts_with "\n":
-      app.buffer.insert(app.buffer.selection.a, msg[1..^1])
+      # handle the funny logs
+      logfile.writeLine(msg[1..^1])
     elif msg.starts_with "newver\n":
       app.newVer = parseInt msg["newver\n".len..^1]
     elif msg.starts_with "dlstat\n":
@@ -91,6 +95,8 @@ proc handle_main_recv(app: AppState) =
       of "0": discard # WTF.
       of "1": quit(0)
       else: msg.recv_unknown_msg "main"
+    elif msg.starts_with "dlprogress\n":
+      app.dlprogress = some msg["dlprogress\n".len..^1].parseFloat
     else: msg.recv_unknown_msg "main"
 
 method view(app: AppState): Widget =
@@ -98,74 +104,55 @@ method view(app: AppState): Widget =
 
   let layout = (app.leftButtons, app.rightButtons)
   result = gui:
-    Window:
-      title = title
+    AdwWindow:
       defaultSize = (800, 600)
-      iconName = icon
-
-      AdwHeaderBar {.addTitlebar.}:
-        windowControls = layout
-        centeringPolicy = CenteringPolicyLoose
-        showLeftButtons = true
-        showRightButtons = true
-        showBackButton = true
-        tooltip = ""
-        sizeRequest = app.sizeRequest
-
-        if AdwVersion >= (1, 4):
-          Box {.addTitle.}:
-            Label(text = title)
-            Icon(name = icon) {.expand: false.}
 
       Box(orient = OrientY):
-        Box(orient = OrientX, margin = 12, spacing = 6) {.expand: false.}:
+        AdwHeaderBar {.expand: false.}:
+          style = HeaderBarFlat
 
-          Button:
-            text = if app.dlfailed: "Force Download Update" else: "Download Update"
-            sensitive = app.newVer > 0
-            if app.dlfailed:
-              style = [ButtonDestructive]
-            elif app.newVer > 0 and not app.canApplyUpdate:
-              style = [ButtonSuggested]
+        StatusPage():
+          iconName = "ultramarine"
+          title = "Ultramarine System Upgrade"
+          description = "You may use this app to upgrade Ultramarine Linux\nto the latest version: [Ultramarine 40]"
 
-            proc clicked() =
-              if app.dlfailed:
-                var ver = app.newVer
-                if app.newVer > 0: app.newVer *= -1
-                if ver < 0: ver *= -1
-                app.hub[].toThrd.send fmt "forcedl\n{app.user.name}\n{app.user.password}\n{ver}"
-                return
-              var ver = app.newVer
-              if app.newVer > 0: app.newVer *= -1 # disables the button
-              if ver < 0: ver *= -1
-              app.user = askpass app
-              if app.user.name == "":
-                app.newVer = ver
-                return
-              app.hub[].toThrd.send fmt "download\n{app.user.name}\n{app.user.password}\n{ver}"
+          Box(orient = OrientY):
+            if app.dlprogress.is_some:
+              ProgressBar {.vAlign: AlignCenter.}:
+                ellipsize = EllipsizeEnd
+                fraction = app.dlprogress.get
+                pulseStep = 0.1
+                showText = true
+                text = "Downloading Updates"
+            Box(orient = OrientX) {.expand: true, hAlign: AlignCenter.}:
+              Button {.expand: false, hAlign: AlignCenter.}:
+                if app.newVer > 0:
+                  style = [ButtonSuggested, ButtonPill]
+                sensitive = app.newVer > 0
+                if app.canApplyUpdate:
+                  style = [ButtonDestructive, ButtonPill]
+                  text = "Reboot now to apply upgrade"
+                else:
+                  text = "Download system upgrade"
 
-          Button:
-            text = "Apply Update (Reboot RIGHT NOW)"
-            sensitive = app.canApplyUpdate
-            if app.canApplyUpdate:
-              style = [ButtonSuggested]
+                proc clicked() =
+                  if app.canApplyUpdate:
+                    app.hub[].toThrd.send fmt "reboot\n{app.user.name}\n{app.user.password}"
+                  if app.dlfailed:
+                    var ver = app.newVer
+                    if app.newVer > 0: app.newVer *= -1
+                    if ver < 0: ver *= -1
+                    app.hub[].toThrd.send fmt "forcedl\n{app.user.name}\n{app.user.password}\n{ver}"
+                    return
+                  var ver = app.newVer
+                  if app.newVer > 0: app.newVer *= -1 # disables the button
+                  if ver < 0: ver *= -1
+                  app.user = askpass app
+                  if app.user.name == "":
+                    app.newVer = ver
+                    return
+                  app.hub[].toThrd.send fmt "download\n{app.user.name}\n{app.user.password}\n{ver}"
 
-            proc clicked() =
-              app.hub[].toThrd.send fmt "reboot\n{app.user.name}\n{app.user.password}"
-
-        ScrolledWindow:
-          TextView:
-            margin = 12
-            buffer = app.buffer
-            monospace = true
-            cursorVisible = true
-            editable = false
-            acceptsTab = false
-            indent = 0
-            sensitive = false
-            tooltip = ""
-            sizeRequest = app.sizeRequest
-            style = [StyleClass("bright-fg")]
 
 proc setupClient(hub: ref Hub) =
   hub[].toThrd.send "updck"
@@ -178,6 +165,7 @@ proc setupClient(hub: ref Hub) =
   adw.brew(gui(App(buffer = buf, hub = hub)), stylesheets=[newStyleSheet(css)])
 
 proc main() =
+  defer: logfile.close()
   var hub = new Hub
   open hub[].toMain
   open hub[].toThrd

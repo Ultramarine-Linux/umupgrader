@@ -54,18 +54,22 @@ proc dnfDownloadUpdate*(hub: ref Hub, ver: int, user: User): bool =
     return
   hub.say ""
   
+  hub[].toMain.send "dlprogress\n0"
   if runWithLogging(hub, sudo, ["-S", dnf, "upgrade", "--refresh", "-y"], user.password & "\n") != 0:
     hub.say "An error occurred. The update cannot continue."
     return
 
+  hub[].toMain.send "dlprogress\n0.33"
   if runWithLogging(hub, sudo, ["-S", dnf, "install", "dnf-plugin-system-upgrade"], user.password & "\n") != 0:
     hub.say "An error occurred. The update cannot continue."
     return
 
+  hub[].toMain.send "dlprogress\n0.5"
   if runWithLogging(hub, sudo, ["-S", "dnf", "system-upgrade", "download", fmt"--releasever={ver}", "--best", "-y"], user.password & "\n") != 0:
     hub[].toMain.send "dlerr"
     return
   
+  hub[].toMain.send "dlprogress\n1"
   return true
 
 proc dnfForceDownloadUpdate*(hub: ref Hub, ver: int, user: User): bool =

@@ -3,7 +3,7 @@
 ## 
 ## Threading ref: https://forum.nim-lang.org/t/10719
 import owlkettle
-import std/[strutils, strformat]
+import std/[strutils, strformat, options]
 
 
 type User* = object
@@ -27,6 +27,7 @@ viewable App:
   user: User
   hub: ref Hub
   dlfailed: bool = false
+  dlprogress: Option[float] = none(float)
 
   hooks:
     afterBuild:
