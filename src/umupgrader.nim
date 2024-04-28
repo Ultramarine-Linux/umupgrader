@@ -137,7 +137,20 @@ method view(app: AppState): Widget =
 
                 proc clicked() =
                   if app.canApplyUpdate:
-                    app.hub[].toThrd.send fmt "reboot\n{app.user.name}\n{app.user.password}"
+                    let (res, _) = app.open: gui:
+                      MessageDialog:
+                        message = "Your computer needs to be restarted for a system upgrade."
+                        DialogButton {.addButton.}:
+                          text = "Cancel"
+                          res = DialogCancel
+                          DialogButton {.addButton.}:
+                            text = "Restart"
+                            res = DialogAccept
+                            style = [ButtonDestructive]
+
+                    if res.kind == DialogAccept:
+                      app.hub[].toThrd.send fmt "reboot\n{app.user.name}\n{app.user.password}"
+                      return
                   if app.dlfailed:
                     var ver = app.newVer
                     if app.newVer > 0: app.newVer *= -1
