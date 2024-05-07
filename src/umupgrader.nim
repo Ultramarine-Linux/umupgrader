@@ -90,7 +90,9 @@ proc handle_main_recv(app: AppState) =
               text = "Ok"
               res = DialogAccept
         app.newVer *= -1
-      of "1": app.canApplyUpdate = true
+      of "1":
+        app.canApplyUpdate = true
+        app.newVer *= -1
       else: msg.recv_unknown_msg "main"
     elif msg == "dlerr":
       app.dlfailed = true
