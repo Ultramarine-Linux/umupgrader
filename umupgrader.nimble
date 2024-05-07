@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.1.1"
 author        = "madomado"
 description   = "A GUI System Upgrader for Ultramarine Linux"
 license       = "MIT"

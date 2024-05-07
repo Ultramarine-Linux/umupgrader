@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Umupgrader
+Comment=A GUI System Upgrader for Ultramarine Linux
+Exec=/usr/bin/umupgrader
+Icon=ultramarine
+Terminal=false
+StartupNotify=false
+Categories=Application;

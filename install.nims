@@ -1,9 +1,10 @@
 #!/usr/bin/env nim
-import std/[envvars, os, strutils, strformat]
+import std/[envvars, os, strutils, strformat, cmdline]
 
 let basedir = getEnv("BASEDIR", "/usr")
 let sudo = if existsEnv "INSTALL_WITH_SUDO": "sudo " else: ""
 let pkgconfigCheck = getEnv("PKGCONFIG_CHECK", "1")
+let nimbleFlags = commandLineParams()[1..^1].join(" ")
 
 proc run(cmd: string) =
     echo "$ " & cmd
@@ -47,6 +48,7 @@ pkgconfig "gtk4"
 pkgconfig "libadwaita-1"
 echo ""
 echo "Building umupgrader"
-run "nimble build"
+run "nimble build " & nimbleFlags
 run sudo & "cp umupgrader " & $(basedir/"bin")
 run sudo & "cp com.fyralabs.umupgrader.policy " & $(basedir/"share/polkit-1/actions/")
+run sudo & "cp umupgrader.desktop "& $(basedir/"share/applications/")
